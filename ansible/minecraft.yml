@@ -1,0 +1,66 @@
+---
+- name: Setup Minecraft Server on Amazon Linux 2023
+  hosts: all
+  become: true
+
+  tasks:
+
+    - name: Remove Java 17 (if installed)
+      ansible.builtin.yum:
+        name: java-17-amazon-corretto
+        state: absent
+
+    - name: Install Amazon Corretto 21 (Java 21)
+      ansible.builtin.yum:
+        name: java-21-amazon-corretto
+        state: present
+
+    - name: Set Java 21 as default
+      ansible.builtin.shell: alternatives --install /usr/bin/java java /usr/lib/jvm/java-21-amazon-corretto/bin/java 1
+
+    - name: Create Minecraft directory
+      ansible.builtin.file:
+        path: /opt/minecraft
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Download Minecraft server .jar
+      ansible.builtin.get_url:
+        url:  https://piston-data.mojang.com/v1/objects/e6ec2f64e6080b9b5d9b471b291c33cc7f509733/server.jar
+        dest: /opt/minecraft/server.jar
+        mode: '0755'
+
+    - name: Accept EULA
+      ansible.builtin.copy:
+        dest: /opt/minecraft/eula.txt
+        content: "eula=true\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/minecraft.service
+        content: |
+          [Unit]
+          Description=Minecraft Server
+          After=network.target
+
+          [Service]
+          WorkingDirectory=/opt/minecraft
+          ExecStart=/usr/bin/java -Xmx1G -Xms1G -jar server.jar nogui
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: '0644'
+
+  handlers:
+    - name: Restart Minecraft
+      ansible.builtin.systemd:
+        name: minecraft
+        state: restarted
+        enabled: true
